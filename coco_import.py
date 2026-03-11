@@ -7,7 +7,7 @@ from collections import defaultdict
 COCO_ROOT = Path("/Users/leogaunt/Documents/COCO")
 ANN_FILE = COCO_ROOT / "annotations" / "instances_train2017.json"
 IMAGE_DIR = COCO_ROOT / "train2017"
-OUTPUT_DIR = COCO_ROOT / "bus_dataset"
+OUTPUT_DIR = COCO_ROOT / "train_dataset"
 # ============================
 
 IMAGES_OUT = OUTPUT_DIR / "images"
@@ -20,21 +20,21 @@ ANN_OUT.mkdir(parents=True, exist_ok=True)
 with open(ANN_FILE, "r") as f:
     coco = json.load(f)
 
-# Find bus category id
-bus_cat_id = next(c["id"] for c in coco["categories"] if c["name"] == "bus")
+# Find train category id
+train_cat_id = next(c["id"] for c in coco["categories"] if c["name"] == "train")
 
 # Map image_id -> image info
 images_by_id = {img["id"]: img for img in coco["images"]}
 
-# Collect only bus annotations, grouped by image
-bus_anns_by_image = defaultdict(list)
+# Collect only train annotations, grouped by image
+train_anns_by_image = defaultdict(list)
 for ann in coco["annotations"]:
-    if ann["category_id"] == bus_cat_id:
-        bus_anns_by_image[ann["image_id"]].append(ann)
+    if ann["category_id"] == train_cat_id:
+        train_anns_by_image[ann["image_id"]].append(ann)
 
 # Copy images and save annotation json per image
 count = 0
-for image_id, anns in bus_anns_by_image.items():
+for image_id, anns in train_anns_by_image.items():
     img_info = images_by_id[image_id]
     file_name = img_info["file_name"]
 
@@ -49,10 +49,10 @@ for image_id, anns in bus_anns_by_image.items():
         with open(out_json, "w") as f:
             json.dump({
                 "image": img_info,
-                "bus_annotations": anns
+                "train_annotations": anns
             }, f, indent=2)
 
         count += 1
 
-print(f"Saved {count} bus images to {IMAGES_OUT}")
+print(f"Saved {count} train images to {IMAGES_OUT}")
 print(f"Saved per-image annotations to {ANN_OUT}")

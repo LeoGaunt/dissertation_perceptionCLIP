@@ -12,3 +12,4 @@ from .eurosat import EuroSAT
 from .food101 import Food101
 from .oxfordpets import OxfordPets
 from .places365 import Places365
+from .dissertation import Dissertation
