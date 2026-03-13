@@ -8,28 +8,19 @@ dissertation_main_template = [
 
 
 dissertation_factor_templates = {
-    "on": {
-        "on_road": ["on the road"],
-        "in_train_station": ["in a train station"],
-        "in_bus_station": ["in a bus station"],
+    "location": {
+        "in_water": ["in water"],
+        "in_air": ["in the air"],
+        "on_fire": ["on fire"],
+    },
+    "planet": {
+        "sun": ["on the sun"],
+        "moon": ["on the moon"],
+        "mars": ["on mars"],
     },
     "direction": {
-        "front": ["from the front"],
-        "back": ["from the back"],
-        "side": ["from the side"],
+        "inverted": ["inverted"],
+        "inside_out": ["inside out"],
     },
-    "amount": {
-        "single": ["a single"],
-        "multiple": ["multiple"],
-    },
-    "weather": {
-        "sunny": ["in sunny weather"],
-        "rainy": ["in rainy weather"],
-        "snowy": ["in snowy weather"],
-    },
-    "decker": {
-        "single_decker": ["a single-decker"],
-        "double_decker": ["a double-decker"],
-    }
 }
 
