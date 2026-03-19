@@ -4,7 +4,7 @@ import torchvision
 from torch.utils.data import Dataset, DataLoader
 
 
-class FIsh:
+class Fish:
     def __init__(self,
                  preprocess,
                  location=os.path.expanduser('~/data/fish'),
