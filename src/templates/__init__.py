@@ -11,3 +11,4 @@ from .places365_template import *
 from .flowers102_template import *
 from .eurosat_template import *
 from .dissertation_template import *
+from.fish_template import *
