@@ -25,10 +25,15 @@ SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
 
 
 def check_image(path: Path) -> tuple[Path, bool, str]:
-    """Try to open and verify an image. Returns (path, is_ok, reason)."""
+    """Fully decode the image the same way PyTorch does. Returns (path, is_ok, reason).
+
+    img.verify() only catches structural corruption — it does not decode pixel data,
+    so it misses 'broken data stream' errors. Using convert('RGB') replicates exactly
+    what torchvision's pil_loader does, catching all failure modes.
+    """
     try:
         with Image.open(path) as img:
-            img.verify()  # catches truncated files
+            img.convert("RGB")  # full decode — catches broken streams, truncation, etc.
         return path, True, ""
     except Exception as e:
         return path, False, str(e)
