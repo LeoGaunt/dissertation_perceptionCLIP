@@ -43,11 +43,5 @@ lila_factor_templates = {
         "motion_blur": ["with motion blur"],
         "infrared": ["in an infrared image"],
         "others": [""],
-    },
-    "camera_type": {
-        "daytime_camera": ["captured by a daytime camera"],
-        "nighttime_camera": ["captured by a nighttime camera"],
-        "infrared_camera": ["captured by an infrared camera"],
-        "others": [""],
     }
 }
