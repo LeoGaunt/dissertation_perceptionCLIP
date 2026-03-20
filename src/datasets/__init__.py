@@ -15,3 +15,4 @@ from .places365 import Places365
 from .dissertation import Dissertation
 from .fish import Fish
 from .lila import Lila
+from .marine import Marine

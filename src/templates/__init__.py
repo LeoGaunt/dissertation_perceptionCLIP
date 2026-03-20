@@ -13,3 +13,4 @@ from .eurosat_template import *
 from .dissertation_template import *
 from .fish_template import *
 from .lila_template import *
+from .marine_template import *
