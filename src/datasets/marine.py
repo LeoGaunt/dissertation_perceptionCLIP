@@ -24,17 +24,29 @@ class Marine:
                                       num_workers=num_workers)
 
 
-        raw_classes = self.test_dataset.classes
-
-        name_map = {
-            "Jelly Fish": "jellyfish",
-            "Sea Urchins": "sea urchins",
-            "Sea Otter": "sea otter",
-            "Turtle_Tortoise": "turtle or tortoise",
-            "Fish": "fish",
-            "Fishes": "fish",
-            "Shrimps": "shrimp",
-            "Sea Clams": "clams",
-        }
-
-        self.classnames = [name_map.get(c, c.replace("_", " ").lower()) for c in raw_classes]
+        self.classnames = [
+            "clam",
+            "coral",
+            "crab",
+            "dolphin",
+            "eel",
+            "fish",
+            "jellyfish",
+            "lobster",
+            "nudibranch",
+            "octopus",
+            "otter",
+            "penguin",
+            "puffer fish",
+            "seahorse",
+            "seal",
+            "sea urchin",
+            "shark",
+            "shrimp",
+            "squid",
+            "starfish",
+            "stingray",
+            "turtle",
+            "whale",
+        ]
+        
