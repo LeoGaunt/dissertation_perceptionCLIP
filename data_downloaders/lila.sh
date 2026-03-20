@@ -8,13 +8,16 @@
 # 4. Downloads up to LIMIT images per category from GCS using gsutil
 #
 # Output structure:
-#   /content/datasets/data/lila/
-#       metadata/          <- JSON annotation file lives here
-#       images/
-#           mule_deer/
-#           gray_fox/
-#           bobcat/
-#           ...            <- one folder per category
+#   /content/dissertation_perceptionCLIP/datasets/data/lila/
+#       mule_deer/
+#       gray_fox/
+#       bobcat/
+#       ...                <- category folders directly here
+#
+#   /content/dissertation_perceptionCLIP/tmp/lila_metadata/
+#       felidae_conservation_fund_2020_2025.zip
+#       *.json
+#       gsutil_lists/      <- per-category GCS path lists (temp)
 #
 # Requirements:
 #   - gsutil  (pre-installed on Google Colab)
@@ -31,17 +34,16 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-LIMIT="${1:-1000}"                    # Max images to download per category
-BASE_DIR="/content/datasets/data/lila"
-METADATA_DIR="${BASE_DIR}/metadata"
-IMAGES_DIR="${BASE_DIR}/images"
+LIMIT="${1:-500}"                     # Max images to download per category
+IMAGES_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
+METADATA_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
 ZIP_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.zip"
 GCS_BASE="gs://public-datasets-lila/felidae-conservation-fund"
 
 echo "============================================================"
 echo " LILA Felidae Conservation Fund — Dataset Setup"
 echo "  Per-category limit : ${LIMIT} images"
-echo "  Output directory   : ${BASE_DIR}"
+echo "  Images directory   : ${IMAGES_DIR}"
 echo "============================================================"
 echo ""
 
@@ -50,6 +52,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[1/5] Creating directories..."
 mkdir -p "${METADATA_DIR}" "${IMAGES_DIR}"
+LISTS_DIR="${METADATA_DIR}/gsutil_lists"
 
 # ---------------------------------------------------------------------------
 # Step 2: Download metadata ZIP
@@ -87,7 +90,6 @@ echo "[4/5] Parsing COCO JSON and building category image lists..."
 # This Python snippet reads the COCO JSON and writes one text file per
 # category containing GCS paths — up to LIMIT paths each.
 # The text files are written to a temp directory and consumed by gsutil below.
-LISTS_DIR="${METADATA_DIR}/gsutil_lists"
 mkdir -p "${LISTS_DIR}"
 
 python3 - <<PYEOF
@@ -150,6 +152,9 @@ echo "      (gsutil will skip files that already exist)"
 echo ""
 
 FAIL_COUNT=0
+NUM_THREADS=$(nproc)
+echo "      Using ${NUM_THREADS} threads (nproc)"
+echo ""
 
 for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     CATEGORY=$(basename "${LIST_FILE}" .txt)
@@ -162,13 +167,26 @@ for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     # -m  : parallel multi-threaded transfer
     # -n  : skip if destination file already exists (no-clobber)
     # -I  : read source URIs from stdin
-    if ! gsutil -m cp -n -I "${DEST_DIR}/" < "${LIST_FILE}" 2>&1 | tail -3; then
+    # parallel_thread_count: use all available CPU threads
+    # parallel_process_count=1: single process, many threads (better for Colab)
+    if ! gsutil -o "GSUtil:parallel_thread_count=${NUM_THREADS}" \
+                -o "GSUtil:parallel_process_count=1" \
+                -m cp -n -I "${DEST_DIR}/" < "${LIST_FILE}" 2>&1 | tail -3; then
         echo "    WARNING: gsutil reported errors for category '${CATEGORY}'"
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 
     echo ""
 done
+
+# ---------------------------------------------------------------------------
+# Remove unwanted categories
+# ---------------------------------------------------------------------------
+echo "Removing ambiguous/catch-all category folders..."
+rm -rf "${IMAGES_DIR}/unknown"
+rm -rf "${IMAGES_DIR}/prey-mammal"
+rm -rf "${IMAGES_DIR}/prey-unknown"
+echo "Done."
 
 # ---------------------------------------------------------------------------
 # Summary
