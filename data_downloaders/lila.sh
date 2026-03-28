@@ -34,7 +34,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-LIMIT="${1:-300}"                     # Max images to download per category
+LIMIT="${1:-500}"                     # Max images to download per category
 IMAGES_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
 METADATA_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
 ZIP_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.zip"

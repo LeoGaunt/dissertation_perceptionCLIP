@@ -3,7 +3,7 @@ fish_simple_template = [
 ]
 
 fish_main_template = [
-    lambda c: f'a photo of {c}, a type of fish.',
+    lambda c: f'a photo of {c}, a type of fish',
 ]
 
 

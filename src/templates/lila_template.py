@@ -3,7 +3,7 @@ lila_simple_template = [
 ]
 
 lila_main_template = [
-    lambda c: f'a photo of {c}, a type of wildlife.',
+    lambda c: f'a photo of {c}, a type of wildlife',
 ]
 
 lila_factor_templates = {
