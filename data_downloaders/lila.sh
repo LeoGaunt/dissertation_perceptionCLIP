@@ -87,9 +87,6 @@ echo "      Found JSON: ${JSON_PATH}"
 # ---------------------------------------------------------------------------
 echo "[4/5] Parsing COCO JSON and building category image lists..."
 
-# This Python snippet reads the COCO JSON and writes one text file per
-# category containing GCS paths — up to LIMIT paths each.
-# The text files are written to a temp directory and consumed by gsutil below.
 mkdir -p "${LISTS_DIR}"
 
 python3 - <<PYEOF
@@ -107,27 +104,21 @@ print(f"  Reading {json_path} ...")
 with open(json_path) as f:
     data = json.load(f)
 
-# id → name
 category_map = {c["id"]: c["name"] for c in data["categories"]}
-
-# id → file_name
 image_map = {img["id"]: img["file_name"] for img in data["images"]}
 
-# image_id → first category_id  (use first annotation per image)
 image_to_cat = {}
 for ann in data["annotations"]:
     iid = ann["image_id"]
     if iid not in image_to_cat:
         image_to_cat[iid] = ann["category_id"]
 
-# Group file_names by category
 cat_files = defaultdict(list)
 for img_id, cat_id in image_to_cat.items():
     fname = image_map.get(img_id)
     if fname:
         cat_files[cat_id].append(fname)
 
-# Write one list file per category (up to limit entries)
 total = 0
 print(f"  Writing gsutil list files (limit={limit} per category)...")
 for cat_id, files in sorted(cat_files.items()):
@@ -148,7 +139,6 @@ PYEOF
 # ---------------------------------------------------------------------------
 echo ""
 echo "[5/5] Downloading images via gsutil..."
-echo "      (gsutil will skip files that already exist)"
 echo ""
 
 FAIL_COUNT=0
@@ -164,14 +154,9 @@ for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     LINE_COUNT=$(wc -l < "${LIST_FILE}")
     echo "  ► ${CATEGORY} (${LINE_COUNT} images) → ${DEST_DIR}"
 
-    # -m  : parallel multi-threaded transfer
-    # -n  : skip if destination file already exists (no-clobber)
-    # -I  : read source URIs from stdin
-    # parallel_thread_count: use all available CPU threads
-    # parallel_process_count=1: single process, many threads (better for Colab)
     if ! gsutil -o "GSUtil:parallel_thread_count=${NUM_THREADS}" \
                 -o "GSUtil:parallel_process_count=1" \
-                -m cp -n -I "${DEST_DIR}/" < "${LIST_FILE}" 2>&1 | tail -3; then
+                -m cp -I "${DEST_DIR}/" < "${LIST_FILE}" 2>&1 | tail -3; then
         echo "    WARNING: gsutil reported errors for category '${CATEGORY}'"
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
@@ -202,5 +187,5 @@ for FOLDER in "${IMAGES_DIR}"/*/; do
     printf "   %-40s %6d images\n" "$(basename "${FOLDER}")" "${COUNT}"
 done
 echo ""
-echo " Run  python3 verify_lila_dataset.py  to validate the dataset."
+echo " Run  python3 clean_lila_dataset.py  then  python3 verify_lila_dataset.py"
 echo "============================================================"
