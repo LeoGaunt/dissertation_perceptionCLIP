@@ -37,20 +37,15 @@ set -euo pipefail
 
 LIMIT="${1:-200}"   # Images per category; override with first argument
 
-# LILA Azure metadata URL for Felidae Conservation Fund
-METADATA_URL="https://lilablobssc.blob.core.windows.net/snapshot-serengeti/SnapshotSerengeti_S1-11_v2.1.json.zip"
-
-# The actual Felidae Conservation Fund metadata URL
-# (Using the correct LILA URL for Felidae Conservation Fund)
-FELIDAE_METADATA_URL="https://lilablobssc.blob.core.windows.net/felidae-conservation-fund/felidae_conservation_fund_2020_2025.json"
+# Azure ZIP containing the COCO Camera Traps JSON
+ZIP_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.zip"
 
 # GCS bucket root for the Felidae Conservation Fund images
 GCS_ROOT="gs://public-datasets-lila/felidae-conservation-fund"
 
 # Local paths
-BASE_DIR="/content/dissertation_perceptionCLIP"
-OUTPUT_DIR="${BASE_DIR}/datasets/data/lila"
-TMP_DIR="${BASE_DIR}/tmp/lila_metadata"
+OUTPUT_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
+TMP_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
 LISTS_DIR="${TMP_DIR}/gsutil_lists"
 ZIP_FILE="${TMP_DIR}/felidae_conservation_fund_2020_2025.zip"
 JSON_FILE="${TMP_DIR}/felidae_conservation_fund_2020_2025.json"
@@ -98,28 +93,17 @@ setup_dirs() {
 download_metadata() {
     info "Downloading Felidae Conservation Fund metadata..."
 
-    # Try direct JSON download first; fall back to ZIP if needed
     if [[ -f "$JSON_FILE" ]]; then
         warn "JSON already exists at ${JSON_FILE}, skipping download."
         return
     fi
 
-    # Attempt direct JSON download
-    if curl --fail --silent --show-error --location \
-            --output "$JSON_FILE" \
-            "$FELIDAE_METADATA_URL" 2>/dev/null; then
-        ok "Downloaded JSON directly: ${JSON_FILE}"
-        return
-    fi
-
-    warn "Direct JSON download failed — attempting ZIP download..."
-
     if [[ ! -f "$ZIP_FILE" ]]; then
         curl --fail --show-error --location \
              --progress-bar \
              --output "$ZIP_FILE" \
-             "${FELIDAE_METADATA_URL%.json}.zip" \
-        || err "Failed to download metadata. Check the URL or your internet connection."
+             "$ZIP_URL" \
+        || err "Failed to download metadata ZIP. Check the URL or your internet connection."
         ok "Downloaded ZIP: ${ZIP_FILE}"
     else
         warn "ZIP already exists at ${ZIP_FILE}, skipping download."
@@ -127,15 +111,13 @@ download_metadata() {
 
     info "Extracting ZIP..."
     unzip -o -q "$ZIP_FILE" -d "$TMP_DIR"
-    # Find the JSON regardless of its exact filename inside the ZIP
+
+    # Locate the JSON regardless of any path nesting inside the ZIP
     local found_json
-    found_json=$(find "$TMP_DIR" -maxdepth 2 -name "*.json" | head -1)
-    if [[ -z "$found_json" ]]; then
-        err "No JSON found inside ZIP at ${TMP_DIR}. Check the archive contents."
-    fi
-    if [[ "$found_json" != "$JSON_FILE" ]]; then
-        cp "$found_json" "$JSON_FILE"
-    fi
+    found_json=$(find "$TMP_DIR" -maxdepth 3 -name "*.json" | head -1)
+    [[ -z "$found_json" ]] && err "No JSON found inside ZIP at ${TMP_DIR}."
+    [[ "$found_json" != "$JSON_FILE" ]] && cp "$found_json" "$JSON_FILE"
+
     ok "Extracted JSON: ${JSON_FILE}"
 }
 
