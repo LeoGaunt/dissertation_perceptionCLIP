@@ -2,10 +2,10 @@
 # =============================================================================
 # setup_lila_felidae.sh
 #
-# 1. Downloads the Felidae Conservation Fund images ZIP from Azure
-# 2. Extracts all images into a flat tmp directory
-# 3. Parses the bundled metadata JSON
-# 4. Copies up to LIMIT images per category into named output folders
+# 1. Downloads the Felidae Conservation Fund metadata JSON from Azure
+# 2. Parses the COCO Camera Traps JSON
+# 3. Downloads up to LIMIT images per category directly via HTTPS
+#    (no gsutil, no giant ZIP — individual image files only)
 #
 # Output structure:
 #   /content/dissertation_perceptionCLIP/datasets/data/lila/
@@ -14,17 +14,17 @@
 #       mule_deer/
 #       ...
 #
-#   /content/dissertation_perceptionCLIP/tmp/lila_images/
-#       <raw extracted images>   <- deleted after sorting if --clean passed
+#   /content/dissertation_perceptionCLIP/tmp/lila_metadata/
+#       felidae_conservation_fund_2020_2025.json
 #
 # Requirements:
-#   - python3, curl, unzip  (all pre-installed on Google Colab)
-#   - No gsutil required
+#   - python3, curl  (both pre-installed on Google Colab)
+#   - No gsutil, no AzCopy, no ZIP required
 #
 # Usage:
 #   bash setup_lila_felidae.sh              # default 200 images/category
 #   bash setup_lila_felidae.sh 500          # override per-category limit
-#   bash setup_lila_felidae.sh 500 --clean  # also delete tmp after sorting
+#   bash setup_lila_felidae.sh 200 4        # 200 images, 4 parallel workers
 # =============================================================================
 
 set -euo pipefail
@@ -33,17 +33,18 @@ set -euo pipefail
 # CONFIG
 # =============================================================================
 
-LIMIT="${1:-200}"
-CLEAN="${2:-}"   # pass --clean to remove tmp images dir after sorting
+LIMIT="${1:-200}"    # Images per category
+WORKERS="${2:-8}"    # Parallel download threads (increase if bandwidth allows)
 
-# Single ZIP containing both images and metadata JSON
-ZIP_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.zip"
+# Metadata JSON (direct download, small file ~50MB)
+METADATA_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.json"
+
+# Base URL for individual image downloads
+IMAGE_BASE_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund"
 
 # Local paths
 OUTPUT_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
-TMP_DIR="/content/dissertation_perceptionCLIP/tmp/lila_images"
 META_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
-IMAGES_ZIP="${META_DIR}/felidae_conservation_fund_2020_2025.zip"
 JSON_FILE="${META_DIR}/felidae_conservation_fund_2020_2025.json"
 
 # =============================================================================
@@ -59,11 +60,11 @@ err()  { echo -e "\033[1;31m[ERR ]\033[0m  $*" >&2; exit 1; }
 check_deps() {
     info "Checking dependencies..."
     local missing=()
-    for cmd in python3 curl unzip; do
+    for cmd in python3 curl; do
         command -v "$cmd" &>/dev/null || missing+=("$cmd")
     done
     [[ ${#missing[@]} -gt 0 ]] && err "Missing required commands: ${missing[*]}"
-    ok "All dependencies found (no gsutil needed)."
+    ok "All dependencies found."
 }
 
 # =============================================================================
@@ -72,68 +73,51 @@ check_deps() {
 
 setup_dirs() {
     info "Creating directories..."
-    mkdir -p "$OUTPUT_DIR" "$TMP_DIR" "$META_DIR"
+    mkdir -p "$OUTPUT_DIR" "$META_DIR"
     ok "Directories ready."
 }
 
 # =============================================================================
-# STEP 2 — Download & extract the ZIP
+# STEP 2 — Download metadata JSON
 # =============================================================================
 
-download_and_extract() {
-    info "Downloading images ZIP..."
+download_metadata() {
+    info "Downloading metadata JSON..."
 
-    if [[ ! -f "$IMAGES_ZIP" ]]; then
-        curl --fail --show-error --location \
-             --progress-bar \
-             --output "$IMAGES_ZIP" \
-             "$ZIP_URL" \
-        || err "Download failed. Check the URL or your internet connection."
-        ok "Downloaded: ${IMAGES_ZIP}"
-    else
-        warn "ZIP already exists, skipping download."
+    if [[ -f "$JSON_FILE" ]]; then
+        warn "JSON already exists at ${JSON_FILE}, skipping download."
+        return
     fi
 
-    # Count already-extracted image files
-    local n_extracted
-    n_extracted=$(find "$TMP_DIR" -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) 2>/dev/null | wc -l)
+    curl --fail --show-error --location \
+         --progress-bar \
+         --output "$JSON_FILE" \
+         "$METADATA_URL" \
+    || err "Metadata download failed. Check the URL or your connection."
 
-    if (( n_extracted > 0 )); then
-        warn "Found ${n_extracted} already-extracted images in ${TMP_DIR}, skipping extraction."
-    else
-        info "Extracting ZIP to ${TMP_DIR} (this may take a while)..."
-        unzip -o -q "$IMAGES_ZIP" -d "$TMP_DIR" \
-        || err "Extraction failed."
-        ok "Extracted all files."
-    fi
-
-    # Locate the metadata JSON (may be bundled inside the ZIP)
-    if [[ ! -f "$JSON_FILE" ]]; then
-        local found_json
-        found_json=$(find "$TMP_DIR" "$META_DIR" -maxdepth 5 -name "*.json" 2>/dev/null | head -1)
-        [[ -z "$found_json" ]] && err "No JSON metadata found. The ZIP may not contain a metadata file — check the LILA dataset page."
-        cp "$found_json" "$JSON_FILE"
-        ok "Located metadata JSON: ${JSON_FILE}"
-    else
-        warn "JSON already exists at ${JSON_FILE}, skipping."
-    fi
+    ok "Downloaded metadata: ${JSON_FILE}"
 }
 
 # =============================================================================
-# STEP 3 — Sort images into category folders
+# STEP 3 — Parse JSON and download images via HTTPS
 # =============================================================================
 
-sort_images() {
-    info "Sorting images into category folders (limit: ${LIMIT}/category)..."
+download_images() {
+    info "Parsing metadata and downloading images (limit: ${LIMIT}/category, workers: ${WORKERS})..."
 
     python3 - <<PYEOF
-import json, os, sys, re, shutil
+import json, os, re, sys
 from pathlib import Path
+from urllib.request import urlretrieve
+from urllib.error import URLError, HTTPError
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
-JSON_FILE  = "${JSON_FILE}"
-TMP_DIR    = "${TMP_DIR}"
-OUTPUT_DIR = "${OUTPUT_DIR}"
-LIMIT      = int("${LIMIT}")
+JSON_FILE      = "${JSON_FILE}"
+OUTPUT_DIR     = "${OUTPUT_DIR}"
+IMAGE_BASE_URL = "${IMAGE_BASE_URL}"
+LIMIT          = int("${LIMIT}")
+WORKERS        = int("${WORKERS}")
 
 # ---- Load metadata ----------------------------------------------------------
 print(f"  Loading {JSON_FILE} ...")
@@ -150,18 +134,7 @@ if not images:
 
 print(f"  Found {len(categories)} categories, {len(images)} images in metadata.")
 
-# ---- Index all extracted files by basename ----------------------------------
-# The ZIP may extract into subdirectories, so we walk the full tree.
-print(f"  Indexing extracted files in {TMP_DIR} ...")
-extracted: dict[str, Path] = {}
-for p in Path(TMP_DIR).rglob("*"):
-    if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-        extracted[p.name] = p
-
-print(f"  Indexed {len(extracted)} image files on disk.")
-
 # ---- Build deduplicated per-category image lists ----------------------------
-# Key by image_id so multiple annotations on the same image don't inflate counts.
 cat_image_sets: dict[str, dict] = {name: {} for name in categories.values()}
 
 for ann in data.get("annotations", []):
@@ -169,73 +142,79 @@ for ann in data.get("annotations", []):
     img_id   = ann.get("image_id")
     img_path = images.get(img_id)
     if cat_name and img_id and img_path:
-        cat_image_sets[cat_name][img_id] = img_path
+        cat_image_sets[cat_name][img_id] = img_path   # dedup by image_id
 
-# ---- Copy files into OUTPUT_DIR/category/ -----------------------------------
-total_copied  = 0
-total_missing = 0
+# ---- Build download task list -----------------------------------------------
+# Each task: (url, destination_path)
+tasks: list[tuple[str, Path]] = []
 
 for cat_name, img_dict in cat_image_sets.items():
     if not img_dict:
-        print(f"  [SKIP] '{cat_name}' — no annotations.")
         continue
-
     safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", cat_name.strip().lower())
     cat_dir   = Path(OUTPUT_DIR) / safe_name
     cat_dir.mkdir(parents=True, exist_ok=True)
 
-    # Skip categories already at the limit (idempotent re-runs)
-    existing = sum(1 for f in cat_dir.iterdir() if f.is_file())
-    paths    = list(img_dict.values())[:LIMIT]
+    # Skip categories already fully downloaded
+    existing  = {f.name for f in cat_dir.iterdir() if f.is_file()}
+    rel_paths = list(img_dict.values())[:LIMIT]
+    needed    = [p for p in rel_paths if Path(p).name not in existing]
 
-    if existing >= len(paths):
-        print(f"  [SKIP] '{cat_name}' — already has {existing}/{len(paths)} images.")
+    if not needed:
+        print(f"  [SKIP] '{cat_name}' — already complete ({len(existing)} images).")
         continue
 
-    copied  = 0
-    missing = 0
-    for rel_path in paths:
-        fname = Path(rel_path).name
-        src   = extracted.get(fname)
-        if src is None:
-            missing += 1
-            continue
-        dst = cat_dir / fname
-        if not dst.exists():
-            shutil.copy2(src, dst)
-            copied += 1
+    for rel_path in needed:
+        url = IMAGE_BASE_URL.rstrip("/") + "/" + rel_path.lstrip("/")
+        dst = cat_dir / Path(rel_path).name
+        tasks.append((url, dst))
 
-    status = f"{copied} copied"
-    if missing:
-        status += f", {missing} not found on disk"
-    print(f"  [DONE] '{cat_name}' ({safe_name}) → {status}")
-    total_copied  += copied
-    total_missing += missing
+if not tasks:
+    print("  Nothing to download — all categories already complete.")
+    sys.exit(0)
 
-print(f"\n  Total copied : {total_copied}")
-if total_missing:
-    print(f"  Total missing: {total_missing} (in metadata but not in ZIP)")
+print(f"  Queued {len(tasks)} images across {len(cat_image_sets)} categories.")
+print(f"  Downloading with {WORKERS} parallel workers...\n")
+
+# ---- Threaded download ------------------------------------------------------
+lock          = threading.Lock()
+completed     = 0
+failed        = 0
+total         = len(tasks)
+REPORT_EVERY  = max(1, total // 20)   # print progress ~every 5%
+
+def download_one(args: tuple[str, Path]) -> tuple[bool, str]:
+    url, dst = args
+    try:
+        urlretrieve(url, dst)
+        return True, ""
+    except (HTTPError, URLError, OSError) as e:
+        return False, f"{dst.name}: {e}"
+
+with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+    futures = {pool.submit(download_one, t): t for t in tasks}
+    for future in as_completed(futures):
+        success, msg = future.result()
+        with lock:
+            if success:
+                completed += 1
+            else:
+                failed += 1
+                print(f"  [WARN] {msg}")
+            done = completed + failed
+            if done % REPORT_EVERY == 0 or done == total:
+                pct = 100 * done // total
+                print(f"  [{pct:3d}%] {done}/{total} done  "
+                      f"({completed} ok, {failed} failed)")
+
+print(f"\n  Download complete: {completed} succeeded, {failed} failed.")
 PYEOF
 
-    ok "Sorting complete."
+    ok "Image downloads complete."
 }
 
 # =============================================================================
-# STEP 4 — Optional cleanup of tmp extracted images
-# =============================================================================
-
-cleanup() {
-    if [[ "$CLEAN" == "--clean" ]]; then
-        info "Removing tmp images directory (${TMP_DIR})..."
-        rm -rf "$TMP_DIR"
-        ok "Cleaned up."
-    else
-        info "Tmp images kept at ${TMP_DIR}. Pass --clean to remove after sorting."
-    fi
-}
-
-# =============================================================================
-# STEP 5 — Summary
+# STEP 4 — Summary
 # =============================================================================
 
 print_summary() {
@@ -265,15 +244,14 @@ main() {
     echo "============================================================"
     echo "  LILA Felidae Conservation Fund — Dataset Setup"
     echo "  Per-category limit : ${LIMIT}"
-    echo "  Cleanup after sort : ${CLEAN:-no}"
+    echo "  Parallel workers   : ${WORKERS}"
     echo "============================================================"
     echo ""
 
     check_deps
     setup_dirs
-    download_and_extract
-    sort_images
-    cleanup
+    download_metadata
+    download_images
     print_summary
 }
 
