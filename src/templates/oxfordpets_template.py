@@ -40,3 +40,55 @@ oxfordpets_factor_templates = {
         "petted": ["being petted"],
     },
 }
+
+oxfordpets_bad_factor_templates = {
+    "species": {
+        "lizard": ["lizard"],
+        "hamster": ["hamster"],
+        "rabbit": ["rabbit"],
+    },
+    "background": {
+        "car": ["in a car"],
+        "kitchen": ["in a kitchen"],
+        "office": ["in an office"],
+        "in space": ["in space"],
+    },
+    "pose": {
+        "flying": ["flying"],
+        "swimming": ["swimming"],
+        "climbing": ["climbing"],
+    },
+    "interaction": {
+        "front-flipping": ["front-flipping"],
+        "back-flipping": ["back-flipping"],
+        "dancing": ["dancing"],
+    },
+}
+
+oxfordpets_bad_factor_templates_with_others = {
+    "species": {
+        "others": [""],
+        "lizard": ["lizard"],
+        "hamster": ["hamster"],
+        "rabbit": ["rabbit"],
+    },
+    "background": {
+        "others": [""],
+        "car": ["in a car"],
+        "kitchen": ["in a kitchen"],
+        "office": ["in an office"],
+        "in space": ["in space"],
+    },
+    "pose": {
+        "others": [""],
+        "flying": ["flying"],
+        "swimming": ["swimming"],
+        "climbing": ["climbing"],
+    },
+    "interaction": {
+        "others": [""],
+        "front-flipping": ["front-flipping"],
+        "back-flipping": ["back-flipping"],
+        "dancing": ["dancing"],
+    },
+}
