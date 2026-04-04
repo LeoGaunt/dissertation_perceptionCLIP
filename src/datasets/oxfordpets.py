@@ -16,10 +16,10 @@ class OxfordPets:
                  seed=0,
                  **kwargs):
         self.train_dataset = torchvision.datasets.OxfordIIITPet(root=location, split='trainval',
-                                                                transform=preprocess)
+                                                                transform=preprocess, download=True)
         self.val_dataset = None
         self.test_dataset = torchvision.datasets.OxfordIIITPet(root=location, split='test',
-                                                               transform=preprocess)
+                                                               transform=preprocess, download=True)
         self.train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True,
                                        num_workers=num_workers)
         self.val_loader = None
