@@ -1,258 +1,206 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # =============================================================================
 # setup_lila_felidae.sh
 #
-# 1. Downloads the Felidae Conservation Fund metadata JSON from Azure
-# 2. Parses the COCO Camera Traps JSON
-# 3. Downloads up to LIMIT images per category directly via HTTPS
-#    (no gsutil, no giant ZIP — individual image files only)
+# 1. Downloads the Felidae Conservation Fund metadata ZIP from Azure
+# 2. Extracts the COCO Camera Traps JSON
+# 3. Parses the JSON to build per-category image lists
+# 4. Downloads up to LIMIT images per category from GCS using gsutil
 #
 # Output structure:
 #   /content/dissertation_perceptionCLIP/datasets/data/lila/
-#       bobcat/
-#       gray_fox/
 #       mule_deer/
-#       ...
+#       gray_fox/
+#       bobcat/
+#       ...                <- category folders directly here
 #
 #   /content/dissertation_perceptionCLIP/tmp/lila_metadata/
-#       felidae_conservation_fund_2020_2025.json
+#       felidae_conservation_fund_2020_2025.zip
+#       *.json
+#       gsutil_lists/      <- per-category GCS path lists (temp)
 #
 # Requirements:
-#   - python3, curl  (both pre-installed on Google Colab)
-#   - No gsutil, no AzCopy, no ZIP required
+#   - gsutil  (pre-installed on Google Colab)
+#   - python3 (pre-installed on Google Colab)
+#   - curl, unzip
 #
 # Usage:
-#   bash setup_lila_felidae.sh              # default 200 images/category
-#   bash setup_lila_felidae.sh 500          # override per-category limit
-#   bash setup_lila_felidae.sh 200 4        # 200 images, 4 parallel workers
+#   bash setup_lila_felidae.sh
+#   bash setup_lila_felidae.sh 500      <- override per-category limit
 # =============================================================================
 
 set -euo pipefail
 
-# =============================================================================
-# CONFIG
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+LIMIT="${1:-300}"                     # Max images to download per category
+IMAGES_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
+METADATA_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
+ZIP_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.zip"
+GCS_BASE="gs://public-datasets-lila/felidae-conservation-fund"
 
-LIMIT="${1:-200}"    # Images per category
-WORKERS="${2:-8}"    # Parallel download threads (increase if bandwidth allows)
+echo "============================================================"
+echo " LILA Felidae Conservation Fund — Dataset Setup"
+echo "  Per-category limit : ${LIMIT} images"
+echo "  Images directory   : ${IMAGES_DIR}"
+echo "============================================================"
+echo ""
 
-# Metadata JSON (direct download, small file ~50MB)
-METADATA_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund/felidae_conservation_fund_2020_2025.json"
+# ---------------------------------------------------------------------------
+# Step 1: Create directories
+# ---------------------------------------------------------------------------
+echo "[1/5] Creating directories..."
+mkdir -p "${METADATA_DIR}" "${IMAGES_DIR}"
+LISTS_DIR="${METADATA_DIR}/gsutil_lists"
 
-# Base URL for individual image downloads
-IMAGE_BASE_URL="https://lilawildlife.blob.core.windows.net/lila-wildlife/felidae-conservation-fund"
+# ---------------------------------------------------------------------------
+# Step 2: Download metadata ZIP
+# ---------------------------------------------------------------------------
+ZIP_PATH="${METADATA_DIR}/felidae_conservation_fund_2020_2025.zip"
 
-# Local paths
-OUTPUT_DIR="/content/dissertation_perceptionCLIP/datasets/data/lila"
-META_DIR="/content/dissertation_perceptionCLIP/tmp/lila_metadata"
-JSON_FILE="${META_DIR}/felidae_conservation_fund_2020_2025.json"
+if [ -f "${ZIP_PATH}" ]; then
+    echo "[2/5] Metadata ZIP already exists, skipping download."
+else
+    echo "[2/5] Downloading metadata ZIP..."
+    curl -L --progress-bar --retry 3 --retry-delay 5 \
+         -o "${ZIP_PATH}" "${ZIP_URL}"
+    echo "      Saved to: ${ZIP_PATH}"
+fi
 
-# =============================================================================
-# HELPERS
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Step 3: Extract ZIP
+# ---------------------------------------------------------------------------
+echo "[3/5] Extracting metadata ZIP..."
+unzip -o "${ZIP_PATH}" -d "${METADATA_DIR}"
 
-log()  { echo "[$(date '+%H:%M:%S')] $*"; }
-info() { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
-ok()   { echo -e "\033[1;32m[ OK ]\033[0m  $*"; }
-warn() { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
-err()  { echo -e "\033[1;31m[ERR ]\033[0m  $*" >&2; exit 1; }
+# Auto-detect the extracted JSON file
+JSON_PATH=$(find "${METADATA_DIR}" -name "*.json" | head -n 1)
+if [ -z "${JSON_PATH}" ]; then
+    echo "ERROR: No JSON file found after extraction. Aborting."
+    exit 1
+fi
+echo "      Found JSON: ${JSON_PATH}"
 
-check_deps() {
-    info "Checking dependencies..."
-    local missing=()
-    for cmd in python3 curl; do
-        command -v "$cmd" &>/dev/null || missing+=("$cmd")
-    done
-    [[ ${#missing[@]} -gt 0 ]] && err "Missing required commands: ${missing[*]}"
-    ok "All dependencies found."
-}
+# ---------------------------------------------------------------------------
+# Step 4: Parse JSON — build per-category image lists
+# ---------------------------------------------------------------------------
+echo "[4/5] Parsing COCO JSON and building category image lists..."
 
-# =============================================================================
-# STEP 1 — Directories
-# =============================================================================
+# This Python snippet reads the COCO JSON and writes one text file per
+# category containing GCS paths — up to LIMIT paths each.
+# The text files are written to a temp directory and consumed by gsutil below.
+mkdir -p "${LISTS_DIR}"
 
-setup_dirs() {
-    info "Creating directories..."
-    mkdir -p "$OUTPUT_DIR" "$META_DIR"
-    ok "Directories ready."
-}
-
-# =============================================================================
-# STEP 2 — Download metadata JSON
-# =============================================================================
-
-download_metadata() {
-    info "Downloading metadata JSON..."
-
-    if [[ -f "$JSON_FILE" ]]; then
-        warn "JSON already exists at ${JSON_FILE}, skipping download."
-        return
-    fi
-
-    curl --fail --show-error --location \
-         --progress-bar \
-         --output "$JSON_FILE" \
-         "$METADATA_URL" \
-    || err "Metadata download failed. Check the URL or your connection."
-
-    ok "Downloaded metadata: ${JSON_FILE}"
-}
-
-# =============================================================================
-# STEP 3 — Parse JSON and download images via HTTPS
-# =============================================================================
-
-download_images() {
-    info "Parsing metadata and downloading images (limit: ${LIMIT}/category, workers: ${WORKERS})..."
-
-    python3 - <<PYEOF
-import json, os, re, sys
+python3 - <<PYEOF
+import json
+import os
 from pathlib import Path
-from urllib.request import urlretrieve
-from urllib.error import URLError, HTTPError
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+from collections import defaultdict
 
-JSON_FILE      = "${JSON_FILE}"
-OUTPUT_DIR     = "${OUTPUT_DIR}"
-IMAGE_BASE_URL = "${IMAGE_BASE_URL}"
-LIMIT          = int("${LIMIT}")
-WORKERS        = int("${WORKERS}")
+json_path   = "${JSON_PATH}"
+lists_dir   = "${LISTS_DIR}"
+gcs_base    = "${GCS_BASE}"
+limit       = int("${LIMIT}")
 
-# ---- Load metadata ----------------------------------------------------------
-print(f"  Loading {JSON_FILE} ...")
-with open(JSON_FILE) as f:
+print(f"  Reading {json_path} ...")
+with open(json_path) as f:
     data = json.load(f)
 
-categories = {c["id"]: c["name"] for c in data.get("categories", [])}
-images     = {img["id"]: img["file_name"] for img in data.get("images", [])}
+# id → name
+category_map = {c["id"]: c["name"] for c in data["categories"]}
 
-if not categories:
-    sys.exit("ERROR: No categories found in JSON.")
-if not images:
-    sys.exit("ERROR: No images found in JSON.")
+# id → file_name
+image_map = {img["id"]: img["file_name"] for img in data["images"]}
 
-print(f"  Found {len(categories)} categories, {len(images)} images in metadata.")
+# image_id → first category_id  (use first annotation per image)
+image_to_cat = {}
+for ann in data["annotations"]:
+    iid = ann["image_id"]
+    if iid not in image_to_cat:
+        image_to_cat[iid] = ann["category_id"]
 
-# ---- Build deduplicated per-category image lists ----------------------------
-cat_image_sets: dict[str, dict] = {name: {} for name in categories.values()}
+# Group file_names by category
+cat_files = defaultdict(list)
+for img_id, cat_id in image_to_cat.items():
+    fname = image_map.get(img_id)
+    if fname:
+        cat_files[cat_id].append(fname)
 
-for ann in data.get("annotations", []):
-    cat_name = categories.get(ann.get("category_id"))
-    img_id   = ann.get("image_id")
-    img_path = images.get(img_id)
-    if cat_name and img_id and img_path:
-        cat_image_sets[cat_name][img_id] = img_path   # dedup by image_id
+# Write one list file per category (up to limit entries)
+total = 0
+print(f"  Writing gsutil list files (limit={limit} per category)...")
+for cat_id, files in sorted(cat_files.items()):
+    cat_name = category_map[cat_id].strip().lower().replace(" ", "_").replace("/", "-")
+    subset   = files[:limit]
+    list_file = os.path.join(lists_dir, f"{cat_name}.txt")
+    with open(list_file, "w") as lf:
+        for fname in subset:
+            lf.write(f"{gcs_base}/{fname}\n")
+    total += len(subset)
+    print(f"    {cat_name:<40} {len(subset):>5} images")
 
-# ---- Build download task list -----------------------------------------------
-# Each task: (url, destination_path)
-tasks: list[tuple[str, Path]] = []
-
-for cat_name, img_dict in cat_image_sets.items():
-    if not img_dict:
-        continue
-    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", cat_name.strip().lower())
-    cat_dir   = Path(OUTPUT_DIR) / safe_name
-    cat_dir.mkdir(parents=True, exist_ok=True)
-
-    # Skip categories already fully downloaded
-    existing  = {f.name for f in cat_dir.iterdir() if f.is_file()}
-    rel_paths = list(img_dict.values())[:LIMIT]
-    needed    = [p for p in rel_paths if Path(p).name not in existing]
-
-    if not needed:
-        print(f"  [SKIP] '{cat_name}' — already complete ({len(existing)} images).")
-        continue
-
-    for rel_path in needed:
-        url = IMAGE_BASE_URL.rstrip("/") + "/" + rel_path.lstrip("/")
-        dst = cat_dir / Path(rel_path).name
-        tasks.append((url, dst))
-
-if not tasks:
-    print("  Nothing to download — all categories already complete.")
-    sys.exit(0)
-
-print(f"  Queued {len(tasks)} images across {len(cat_image_sets)} categories.")
-print(f"  Downloading with {WORKERS} parallel workers...\n")
-
-# ---- Threaded download ------------------------------------------------------
-lock          = threading.Lock()
-completed     = 0
-failed        = 0
-total         = len(tasks)
-REPORT_EVERY  = max(1, total // 20)   # print progress ~every 5%
-
-def download_one(args: tuple[str, Path]) -> tuple[bool, str]:
-    url, dst = args
-    try:
-        urlretrieve(url, dst)
-        return True, ""
-    except (HTTPError, URLError, OSError) as e:
-        return False, f"{dst.name}: {e}"
-
-with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-    futures = {pool.submit(download_one, t): t for t in tasks}
-    for future in as_completed(futures):
-        success, msg = future.result()
-        with lock:
-            if success:
-                completed += 1
-            else:
-                failed += 1
-                print(f"  [WARN] {msg}")
-            done = completed + failed
-            if done % REPORT_EVERY == 0 or done == total:
-                pct = 100 * done // total
-                print(f"  [{pct:3d}%] {done}/{total} done  "
-                      f"({completed} ok, {failed} failed)")
-
-print(f"\n  Download complete: {completed} succeeded, {failed} failed.")
+print(f"\n  Total images to download: {total:,}")
 PYEOF
 
-    ok "Image downloads complete."
-}
+# ---------------------------------------------------------------------------
+# Step 5: Download images per category using gsutil
+# ---------------------------------------------------------------------------
+echo ""
+echo "[5/5] Downloading images via gsutil..."
+echo "      (gsutil will skip files that already exist)"
+echo ""
 
-# =============================================================================
-# STEP 4 — Summary
-# =============================================================================
+FAIL_COUNT=0
+NUM_THREADS=$(nproc)
+echo "      Using ${NUM_THREADS} threads (nproc)"
+echo ""
 
-print_summary() {
+for LIST_FILE in "${LISTS_DIR}"/*.txt; do
+    CATEGORY=$(basename "${LIST_FILE}" .txt)
+    DEST_DIR="${IMAGES_DIR}/${CATEGORY}"
+    mkdir -p "${DEST_DIR}"
+
+    LINE_COUNT=$(wc -l < "${LIST_FILE}")
+    echo "  ► ${CATEGORY} (${LINE_COUNT} images) → ${DEST_DIR}"
+
+    # -m  : parallel multi-threaded transfer
+    # -n  : skip if destination file already exists (no-clobber)
+    # -I  : read source URIs from stdin
+    # parallel_thread_count: use all available CPU threads
+    # parallel_process_count=1: single process, many threads (better for Colab)
+    if ! gsutil -o "GSUtil:parallel_thread_count=${NUM_THREADS}" \
+                -o "GSUtil:parallel_process_count=1" \
+                -m cp -n -I "${DEST_DIR}/" < "${LIST_FILE}" 2>&1 | tail -3; then
+        echo "    WARNING: gsutil reported errors for category '${CATEGORY}'"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+
     echo ""
-    echo "============================================================"
-    echo "  LILA Felidae Dataset — Setup Complete"
-    echo "============================================================"
-    echo "  Output dir : ${OUTPUT_DIR}"
-    echo "  Limit      : ${LIMIT} images/category"
-    echo ""
-    echo "  Per-category image counts:"
-    for cat_dir in "${OUTPUT_DIR}"/*/; do
-        [[ -d "$cat_dir" ]] || continue
-        local count
-        count=$(find "$cat_dir" -maxdepth 1 -type f | wc -l)
-        printf "    %-35s %d images\n" "$(basename "$cat_dir")" "$count"
-    done
-    echo "============================================================"
-}
+done
 
-# =============================================================================
-# MAIN
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Remove unwanted categories
+# ---------------------------------------------------------------------------
+echo "Removing ambiguous/catch-all category folders..."
+rm -rf "${IMAGES_DIR}/unknown"
+rm -rf "${IMAGES_DIR}/prey-mammal"
+rm -rf "${IMAGES_DIR}/prey-unknown"
+echo "Done."
 
-main() {
-    echo ""
-    echo "============================================================"
-    echo "  LILA Felidae Conservation Fund — Dataset Setup"
-    echo "  Per-category limit : ${LIMIT}"
-    echo "  Parallel workers   : ${WORKERS}"
-    echo "============================================================"
-    echo ""
-
-    check_deps
-    setup_dirs
-    download_metadata
-    download_images
-    print_summary
-}
-
-main "$@"
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+echo "============================================================"
+echo " Download complete!"
+echo ""
+echo " Categories with errors: ${FAIL_COUNT}"
+echo ""
+echo " Image counts per category:"
+for FOLDER in "${IMAGES_DIR}"/*/; do
+    COUNT=$(find "${FOLDER}" -type f | wc -l)
+    printf "   %-40s %6d images\n" "$(basename "${FOLDER}")" "${COUNT}"
+done
+echo ""
+echo " Run  python3 verify_lila_dataset.py  to validate the dataset."
+echo "============================================================"
