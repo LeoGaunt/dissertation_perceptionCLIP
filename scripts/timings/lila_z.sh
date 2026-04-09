@@ -7,7 +7,7 @@ python -m src.zero_shot_inference.perceptionclip_two_step \
 --data_location ./datasets/data/lila   \
 --model ViT-B/16   \
 --infer_mode 0   \
---factors in,time,amount,activity,camera_view,image_quality,camera_type  \
+--factors in,time,activity,camera_view,image_quality  \
 --template lila_template  \
 --main_template lila_main_template   \
 --factor_templates lila_factor_templates   \

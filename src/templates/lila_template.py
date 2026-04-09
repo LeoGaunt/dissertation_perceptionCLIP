@@ -11,7 +11,6 @@ lila_factor_templates = {
         "forest": ["in a forest"],
         "grassland": ["in grassland"],
         "urban": ["in an urban area"],
-        "scrubland": ["in scrubland"],
         "wetland": ["in a wetland"],
         "others": [""],
     },
@@ -21,15 +20,9 @@ lila_factor_templates = {
         "dusk_or_dawn": ["at dusk or dawn"],
         "others": [""],
     },
-    "amount": {
-        "single": ["a single"],
-        "multiple": ["multiple"],
-        "others": [""],
-    },
     "activity": {
         "moving": ["moving"],
         "stationary": ["stationary"],
-        "foraging": ["foraging"],
         "others": [""],
     },
     "camera_view": {
