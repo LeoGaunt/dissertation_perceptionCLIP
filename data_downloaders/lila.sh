@@ -151,11 +151,6 @@ echo "[5/5] Downloading images via gsutil..."
 echo "      (gsutil will skip files that already exist)"
 echo ""
 
-FAIL_COUNT=0
-NUM_THREADS=$(nproc)
-echo "      Using ${NUM_THREADS} threads (nproc)"
-echo ""
-
 for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     CATEGORY=$(basename "${LIST_FILE}" .txt)
     DEST_DIR="${IMAGES_DIR}/${CATEGORY}"
@@ -164,19 +159,30 @@ for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     LINE_COUNT=$(wc -l < "${LIST_FILE}")
     echo "  ► ${CATEGORY} (${LINE_COUNT} images) → ${DEST_DIR}"
 
-    # Download in batches of 50 URIs
     split -l 50 -d "${LIST_FILE}" "${LIST_FILE}.part."
+
+    CATEGORY_FAILS=0
 
     for PART in "${LIST_FILE}.part."*; do
         mapfile -t URLS < "${PART}"
+
         if [ "${#URLS[@]}" -gt 0 ]; then
-            gsutil -o "GSUtil:parallel_thread_count=${NUM_THREADS}" \
-                   -o "GSUtil:parallel_process_count=1" \
-                   -m cp -n "${URLS[@]}" "${DEST_DIR}/"
+            if ! gsutil -o "GSUtil:parallel_thread_count=${NUM_THREADS}" \
+                        -o "GSUtil:parallel_process_count=1" \
+                        -m cp -n "${URLS[@]}" "${DEST_DIR}/"; then
+                echo "    Warning: some files in $(basename "${PART}") failed for ${CATEGORY}"
+                CATEGORY_FAILS=$((CATEGORY_FAILS + 1))
+            fi
         fi
     done
 
     rm -f "${LIST_FILE}.part."*
+
+    if [ "${CATEGORY_FAILS}" -gt 0 ]; then
+        echo "    Category completed with ${CATEGORY_FAILS} failed batch(es)"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+
     echo ""
 done
 
