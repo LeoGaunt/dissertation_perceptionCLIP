@@ -23,5 +23,5 @@ class Flowers:
         self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False,
                                       num_workers=num_workers)
 
-        self.classnames = ['bluebell', 'buttercup', 'colts_foot', 'crocus', 'daffodil', 'daisy', 'dandelion', 'fritillary', 'iris', 'lily_valley', 'pansy', 'snowdrop', 'sunflower', 'tigerlily', 'tulip', 'windflower', 'wilting']
+        self.classnames = ['bluebell', 'buttercup', 'colts foot', 'cowslip', 'crocus', 'daffodil', 'daisy', 'dandelion', 'fritillary', 'iris', 'lily of the valley', 'pansy', 'snowdrop', 'sunflower', 'tigerlily', 'tulip', 'windflower']
 
