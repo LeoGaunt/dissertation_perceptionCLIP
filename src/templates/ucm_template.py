@@ -33,7 +33,7 @@ ucm_factor_templates = {
         "nasa": ["by NASA"],
         "google_earth": ["by Google Earth"],
     },
-    "land_use": {
+    "land use": {
         "urban": ["urban"],
         "rural": ["rural"],
         "suburban": ["suburban"],
