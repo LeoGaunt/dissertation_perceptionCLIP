@@ -151,6 +151,11 @@ echo "[5/5] Downloading images via gsutil..."
 echo "      (gsutil will skip files that already exist)"
 echo ""
 
+FAIL_COUNT=0
+NUM_THREADS=$(nproc)
+echo "      Using ${NUM_THREADS} threads (nproc)"
+echo ""
+
 for LIST_FILE in "${LISTS_DIR}"/*.txt; do
     CATEGORY=$(basename "${LIST_FILE}" .txt)
     DEST_DIR="${IMAGES_DIR}/${CATEGORY}"
