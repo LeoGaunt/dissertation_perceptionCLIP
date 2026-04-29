@@ -21,7 +21,6 @@ marine_factor_templates = {
     "amount": {
         "single": ["a single"],
         "multiple": ["multiple"],
-        "others": [""],
     },
     "location": {
         "ocean": ["in the ocean"],
