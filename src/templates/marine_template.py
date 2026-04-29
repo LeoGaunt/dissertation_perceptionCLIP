@@ -13,14 +13,15 @@ marine_factor_templates = {
         "others": [""],
     },
     "size": {
-        "small": ["small"],
-        "medium": ["medium-sized"],
-        "large": ["large"],
+        "small": ["a small"],
+        "medium": ["a medium-sized"],
+        "large": ["a large"],
         "others": [""],
     },
     "amount": {
-        "single": ["one"],
+        "single": ["a single"],
         "multiple": ["multiple"],
+        "others": [""],
     },
     "location": {
         "ocean": ["in the ocean"],
