@@ -1,7 +1,4 @@
 #!/bin/bash
-# Oxford 17 Flowers Dataset Downloader
-# Organises images into class-named subdirectories under flowers/
-# Target: /content/dissertation_perceptionCLIP/datasets/data/flowers
 
 set -e
 

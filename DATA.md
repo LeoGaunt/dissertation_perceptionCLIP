@@ -2,65 +2,20 @@ Structure for datasets
 ```
 datasets
 ├── data
-    ├── celeba
-    ├── CUB_200_2011
+    ├── dissertation
     ├── eurosat
-    ├── flowers-102
-    ├── food-101
-    ├── ILSVRC2012
-    ├── imagenet-a
-    ├── imagenet-c
-    ├── imagenet-r
-    ├── ImageNetV2-matched-frequency
+    ├── fish
+    ├── flowers
+    ├── marine
     ├── oxford-iiit-pet
-    ├── places365
-    ├── sketch
-    └── waterbird_complete95_forest2water2
+    └── ucm
 ```
 
-
-Structure for ImageNet
+Structure for Dissertation
 ```
-ILSVRC2012
+dissertation
 ├── train
-│   ├── 
-│   └── 
-├── val
-│   ├── 
-│   └── 
-```
-
-Structure for CelabA
-```
-celeba
-├── img_align_celeba
-│   ├── 
-│   └── 
-├── list_attr_celeba.csv
-├── list_bbox_celeba.csv
-├── list_eval_partition.csv
-└── list_landmarks_align_celeba.csv
-```
-
-Structure for Waterbirds
-```
-waterbird_complete95_forest2water2
-├── 
-├── 
-└── metadata.csv
-```
-
-Structure for CUB200
-```
-CUB_200_2011
-├── attributes
-├── images
-├── parts
-├── bounding_boxes.txt
-├── classes.txt
-├── image_class_labels.txt
-├── images.txt
-└── train_test_split.txt
+└── bus
 ```
 
 Structure for EuroSAT
@@ -79,32 +34,90 @@ eurosat
     └── SeaLake
 ```
 
-Structure for Places365
+Structure for Fish
 ```
-places365
-├── data_256
-├── val_256
-├── categories_places365.txt
-├── places365_test.txt
-├── places365_train_standard.txt
-└── places365_val.txt
+fish
+├── Bangus
+├── Big Head Carp
+├── Black Spotted Barb
+├── Catfish
+├── Climbing Perch
+├── Fourfinger Threadfin
+├── Freshwater Eel
+├── Glass Perchlet
+├── Goby
+├── Gold Fish
+├── Gourami
+├── Grass Carp
+├── Green Spotted Puffer
+├── Indian Carp
+├── Indo-Pacific Tarpon
+├── Jaguar Gapote
+├── Janitor Fish
+├── Knifefish
+├── Long-Snouted Pipefish
+├── Mosquito Fish
+├── Mudfish
+├── Mullet
+├── Pangasius
+├── Perch
+├── Scat Fish
+├── Silver Barb
+├── Silver Carp
+├── Silver Perch
+├── Snakehead
+├── Tenpounder
+└── Tilapia
 ```
 
+Structure for Flowers
+```
+flowers
+├── daffodil
+├── snowdrop
+├── lily_valley
+├── bluebell
+├── crocus
+├── iris
+├── tigerlily
+├── tulip
+├── fritillary
+├── sunflower
+├── daisy
+├── colts_foot
+├── dandelion
+├── cowslip
+├── buttercup
+├── windflower
+└── pansy
+```
 
-Structure for Flowers102
+Structure for Marine
 ```
-flowers102
-├── jpg
-├── imagelabels.mat
-└── setid.mat
-```
-
-Structure for Food101
-```
-food-101
-├── images
-├── meta
-└── license_agreement.txt
+main
+├── clam
+├── coral
+├── crab
+├── dolphin
+├── eel
+├── fish
+├── jellyfish
+├── lobster
+├── nudibranch
+├── octopus
+├── otter
+├── penguin
+├── puffer fish
+├── seahorse
+├── seal
+├── stingray
+├── sea urchin
+├── shark
+├── shrimp
+├── squid
+├── starfish
+├── turtle
+└── whale
 ```
 
 Structure for Oxford Pets
@@ -112,4 +125,30 @@ Structure for Oxford Pets
 oxford-iiit-pet
 ├── images
 └── annotations
+```
+
+Structure for UCM
+```
+ucm
+├── agricultural land
+├── airplane
+├── baseball diamond
+├── beach
+├── buildings
+├── chaparral
+├── dense residential
+├── forest
+├── freeway
+├── golf course
+├── harbor
+├── intersection
+├── medium residential
+├── mobile home park
+├── overpass
+├── parking lot
+├── river
+├── runway
+├── sparse residential
+├── storage tanks
+└── tennis court
 ```

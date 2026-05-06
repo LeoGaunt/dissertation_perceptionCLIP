@@ -1,22 +1,18 @@
 #!/bin/bash
 
-set -e  # exit on error
+set -e
 
-# Go to dataset directory
 cd ./datasets/data || { echo "Directory not found"; exit 1; }
 
-# Create fish directory
 mkdir -p fish
 
-# Download dataset from Kaggle
+# Download dataset from Kaggle and unzip it
 echo "Downloading dataset..."
 curl -L -o fish.zip https://www.kaggle.com/api/v1/datasets/download/markdaniellampa/fish-dataset
-
-# Unzip dataset
 echo "Unzipping dataset..."
 unzip -q fish.zip -d fish_raw
 
-# Navigate into extracted folder (adjust if needed)
+# Get folder
 cd fish_raw/FishImgDataset || { echo "Dataset structure not found"; exit 1; }
 
 # Loop through train, test, val

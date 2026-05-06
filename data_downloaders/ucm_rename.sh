@@ -1,6 +1,5 @@
 #!/bin/bash
 
-echo "Renaming UC Merced folders to classnames..."
 declare -A renames=(
     ["agricultural"]="agricultural land"
     ["airplane"]="airplane(s)"
